@@ -35,7 +35,7 @@ The events also come on the websocket service /ws
 A d3 based visualization of the model is shown in real time from http://localhost:3060
 
 Screenshot:
-![Web Page Screenshot](./screenshot "Screenshot")
+![Web Page Screenshot](./screenshot.png "Screenshot")
 
 The page provides intereactivity to toggle signal state from red to green for all roads. The position of the vehicles is updated based on events on websocket
 
