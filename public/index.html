@@ -1,0 +1,155 @@
+<html>
+  <head>
+    <style>
+      .vehicleLabel {
+        font-size: 3.5px;
+        font-family: "Arial";
+        fill: black;
+      }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.7.0/d3.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <script>
+      var intersection_depth=5;
+      var svgContainer;
+      var trafficSocket;
+      var roadGrp
+      var model={};
+
+      $(function(){
+        $.getJSON("/roads",function(d){
+          model.roads = d;
+          px=[]
+          model.roads.forEach(r=>{
+            r.Vehicles=[]
+            px[px.length]=$.getJSON("/roads/"+r.id+"/vehicles",function(veh_count){
+              for(i=0;i<veh_count;i++){
+                r.Vehicles.push({plate:i, color:r.color,distance:-1000})
+              }
+            })
+          })
+          Promise.all(px).then(drawIntersection)
+        })
+      })
+
+      function drawIntersection() {
+        drawFramework();
+        drawVehicles();
+        trafficSocket = new WebSocket("ws://"+document.location.hostname+":"+document.location.port+"/ws");
+        trafficSocket.onopen = function (event) {
+
+        };
+        trafficSocket.onmessage = function (event) {
+          try{
+            if(event.data.indexOf("\n")==-1){
+              msg = JSON.parse(event.data);
+              moveit(msg)
+            } else {
+              msgs = event.data.split("\n")
+              msgs.forEach(function(msg){moveit(JSON.parse(msg))})
+            }
+          }
+          catch(e){
+            console.log(event.data)
+          }
+        }
+      }
+      function moveit(msg){
+        d3.select("#"+msg.road + " #v"+msg.plate).transition().duration(function(d){return ( d.distance<msg.distance)?1000:0}).ease(d3.easeLinear).attr("transform" , function(d){ d.distance= msg.distance;return "translate("+d.distance+" 0)"} )
+      }
+
+      function drawFramework() {
+        var w=800
+        var h=600
+        svg = d3.select("body").append("svg")
+                                             .attr("viewBox","300 225 200 150")
+                                             .attr("width", w)
+                                             .attr("height", h);
+
+       svgContainer=svg.append("g")
+
+       roadGrp = svgContainer.selectAll("g").data(model.roads).enter().append("g").attr("id",function(d){return d.id})
+                      .attr("transform" , function(d){return "translate("+w/2+","+h/2+") rotate(" + d.orientation +") scale(1)"} )
+
+       var zoom = d3.zoom()
+         .scaleExtent([.2, 40])
+         .translateExtent([[00, 00], [w , h]])
+         .on("zoom", function(){
+           svgContainer.attr("transform", d3.event.transform);
+         });
+
+        //zoom
+        svg.call(zoom);
+
+
+        var s = roadGrp.append("line")
+          .attr("x1", function(d){ return -5})
+          .attr("y1", function(d){ return intersection_depth+3})
+          .attr("x2", function(d){ return -15})
+          .attr("y2", function(d){ return intersection_depth+3})
+          .attr("stroke", function(d){ return d.signal?"green":"red"})
+          .attr("stroke-width", function(d){ return 5})
+
+        var l = roadGrp.append("line")
+        l
+          .attr("x1", function(d){ return w/-2})
+          .attr("y1", function(d){ return intersection_depth})
+          .attr("x2", function(d){ return w/2})
+          .attr("y2", function(d){ return intersection_depth})
+          .attr("stroke", function(d){ return d.color})
+          .attr("stroke-width", function(d){ return 1.5})
+
+
+        s.on('click', function(d) {
+          var that = this
+          $.getJSON("/roads/"+d.id+(d.signal?"/stop":"/go"),function(r){
+            d.signal=r.signal
+            d3.select(that).attr("stroke",d.signal?"green":"red")
+          })
+        })
+
+
+      }
+
+
+      function drawVehicles() {
+        var circleGrp = roadGrp.selectAll("g")
+                                  .data(function(d){return d.Vehicles}).enter() .append("g")
+                                  .attr("id",function(d){return "v"+d.plate})
+                                  .attr("transform" , function(d){return "translate(" + d.distance + " " + intersection_depth +")"} )
+
+        var circles = circleGrp.append("circle")
+
+        var circleLabel = circleGrp.append("text")
+                          .attr("x",0)
+                          .attr("y",0)
+                          .attr("class","vehicleLabel")
+                          .attr("fill","black")
+                          .attr("dx","0").attr("dy",intersection_depth+1)
+                          .attr("text-anchor","middle")
+                          .text(function(d){return d.plate})
+
+        var circleAttributes = circles
+                               .attr("id", function (d) { return d.id; })
+                               .attr("r",2.5)
+                               .attr("cx", 0 )
+                               .attr("cy", intersection_depth )
+                               .style("fill", function (d) { return d.color; });
+
+      }
+
+      function sendText(msg) {
+        var payload = {
+          type: "message",
+          text: msg,
+          id:   clientID,
+          date: Date.now()
+        };
+        trafficSocket.send(JSON.stringify(payload));
+      }
+
+    </script>
+  </head>
+  <body>
+  </body>
+</html>
